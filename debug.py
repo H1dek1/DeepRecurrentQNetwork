@@ -7,9 +7,14 @@ from dqn import DQN
 
 def main():
     env = gym.make('CartPole-v0')
-    agent = DQN(env, window_size=4, initial_eps=0.1, learning_starts=10)
+    agent = DQN(
+            env=env, 
+            window_size=4, 
+            initial_eps=0.1, 
+            learning_starts=10,
+            replay_batch_size=3)
     print('Success to construct')
-    history = agent.learn(total_timesteps=20)
+    history = agent.learn(total_timesteps=15)
     print(len(agent._replay_buffer))
 
     #fig, ax = plt.subplots(1, 2)

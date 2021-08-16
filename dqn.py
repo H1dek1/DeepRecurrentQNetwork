@@ -1,4 +1,5 @@
 from collections import deque
+import random
 import gym
 import numpy as np
 
@@ -79,14 +80,15 @@ class DQN:
         while True: # loop episodes
             epi_len = 0
             epi_rew = 0.0
-            obs = self._env.reset()
+            obs = self._env.reset().reshape(1, -1, 1)
             while True: # loop steps
                 # decide action
                 action = self._decide_action(obs, episode_count)
                 # proceed environment
                 next_obs, reward, done, _ = self._env.step(action)
+                next_obs = next_obs.reshape(1, -1, 1)
                 # store experience
-                self._replay_buffer.append( (obs, action, reward, next_obs) )
+                self._replay_buffer.append( np.array([obs[0], action, reward, next_obs[0]], dtype=object) )
                 # update observation
                 obs = next_obs
                 # increments
@@ -117,7 +119,7 @@ class DQN:
 
         if eps < np.random.rand():
             # greedy
-            obs = obs.reshape(1, -1, 1)
+            #obs = obs.reshape(1, -1, 1)
             Q_values = self._Qfunc.predict(obs).flatten()
             action = np.argmax(Q_values)
             
@@ -128,15 +130,58 @@ class DQN:
         return action
     
     def _experience_replay(self,):
-        state_minibatch = []
+        obs_minibatch = []
         target_minibatch = []
         action_minibatch = []
 
         # define sampling size
         minibatch_size = min(len(self._replay_buffer), self._replay_batch_size)
-        minibatch_indices = np.random.randint(low=0, high=len(self._replay_buffer), size=minibatch_size)
-        print(minibatch_indices.shape)
-        print(minibatch_indices)
+        minibatch = np.array(random.sample(self._replay_buffer, minibatch_size), dtype=object)
+        obs = np.stack(minibatch[:,0], axis=0)
+        actions = minibatch[:, 1]
+        rewards = minibatch[:, 2]
+        next_obs = np.stack(minibatch[:,3], axis=0)
+        # current output of network
+        current_Q_values = self._Qfunc.predict(obs)
+        # make target value
+        target_Q_values = current_Q_values.copy()
+        next_Q = self._Qfunc.predict(next_obs)
+        next_maxQ = np.max(next_Q, axis=1)
+        for i, action in enumerate(actions):
+            target_Q_values[i][action] = rewards[i] + self._gamma*next_maxQ[i]
+
+        self._Qfunc.fit(
+                obs,
+                target_Q_values,
+                epochs=1,
+                verbose=0
+                )
+
+
+        print('*'*50)
+        #for (obs, action, reward, next_obs) in minibatch:
+        #    # output of network
+        #    current_Q_values = self._Qfunc.predict(obs)
+        #    print('output shape: ', current_Q_values.shape)
+
+        #    # target value
+        #    target_Q_values = current_Q_values.copy()
+        #    next_maxQ = max(self._Qfunc.predict(next_obs).flatten())
+        #    target_Q_values[0][action] = reward + self._gamma*next_maxQ
+
+        #    obs_minibatch.append(obs)
+        #    target_minibatch.append(target_Q_values)
+        #    action_minibatch.append(action)
+
+        #obs_minibatch = np.array(obs_minibatch)
+        #target_minibatch = np.array(target_minibatch)
+        #print('Shapes')
+        #print(obs.shape)
+        #obs.extend(obs)
+        #print(obs.shape)
+        #print(obs_minibatch.shape)
+        #print(target_minibatch.shape)
+        
 
 
 
