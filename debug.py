@@ -9,18 +9,28 @@ def main():
     env = gym.make('CartPole-v0')
     agent = DQN(
             env=env, 
-            window_size=4, 
-            initial_eps=0.1, 
+            window_size=4,
+            eps_change_length=500,
             learning_starts=10,
-            replay_batch_size=3)
+            initial_eps=1.0
+            )
     print('Success to construct')
-    history = agent.learn(total_timesteps=15)
+    history = agent.learn(total_timesteps=100)
     print(len(agent._replay_buffer))
 
-    #fig, ax = plt.subplots(1, 2)
-    #ax[0].plot(range(len(history['epi_len'])), history['epi_len'])
-    #ax[1].plot(range(len(history['epi_rew'])), history['epi_rew'])
-    #plt.show()
+    fig, ax = plt.subplots(1, 3, figsize=(9, 3), tight_layout=True)
+    ax[0].set_xlabel('total_step', fontsize=15)
+    ax[0].set_ylabel('epi_len', fontsize=15)
+    ax[0].plot(history['total_step'], history['epi_len'])
+    ax[1].set_xlabel('total_step', fontsize=15)
+    ax[1].set_ylabel('epi_rew', fontsize=15)
+    ax[1].plot(history['total_step'], history['epi_rew'])
+    ax[2].set_xlabel('total_step', fontsize=15)
+    ax[2].set_ylabel('ave_loss', fontsize=15)
+    ax[2].plot(history['total_step'], history['ave_loss'])
+    fig.savefig('result.png')
+    plt.show()
+    #agent.simulate(visualize=True)
 
 
 if __name__ == '__main__':
