@@ -58,7 +58,7 @@ class DQN:
             self._Qfunc = None
 
         plot_model(self._Qfunc, show_shapes=True, show_layer_names=True)
-        print(self._Qfunc.summary())
+        #print(self._Qfunc.summary())
 
     def _init_Qfunc(self):
         series_input = Input(shape=(self._window_size, 1), name='series_data')
@@ -72,7 +72,71 @@ class DQN:
         self._Qfunc.compile(optimizer=Adam(learning_rate=self._learning_rate), loss='mean_squared_error')
 
     def learn(self, total_timesteps):
-        pass
+        step_count = 0
+        episode_count = 0
+        history = {'epi_len': [], 'epi_rew': []}
+
+        while True: # loop episodes
+            epi_len = 0
+            epi_rew = 0.0
+            obs = self._env.reset()
+            while True: # loop steps
+                # decide action
+                action = self._decide_action(obs, episode_count)
+                # proceed environment
+                next_obs, reward, done, _ = self._env.step(action)
+                # store experience
+                self._replay_buffer.append( (obs, action, reward, next_obs) )
+                # update observation
+                obs = next_obs
+                # increments
+                step_count += 1
+                epi_len += 1
+                epi_rew += reward
+                # experience replay
+                if step_count > self._learning_starts:
+                    self._experience_replay()
+                # judgement
+                if done or step_count == total_timesteps:
+                    break # from inside loop
+
+            history['epi_len'].append(epi_len)
+            history['epi_rew'].append(epi_rew)
+            # End Inside loop
+            if step_count >= total_timesteps:
+                break # from outside loop
+
+        return history
+
+    def _decide_action(self, obs, episode_count):
+        action = self._env.action_space.sample()
+        if episode_count < self._eps_change_length:
+            eps = self._initial_eps + (self._final_eps - self._initial_eps) * (episode_count/self._eps_change_length)
+        else:
+            eps = self._final_eps
+
+        if eps < np.random.rand():
+            # greedy
+            obs = obs.reshape(1, -1, 1)
+            Q_values = self._Qfunc.predict(obs).flatten()
+            action = np.argmax(Q_values)
+            
+        else:
+            # random
+            action = np.random.randint(0, self._n_action)
+
+        return action
+    
+    def _experience_replay(self,):
+        state_minibatch = []
+        target_minibatch = []
+        action_minibatch = []
+
+        # define sampling size
+        minibatch_size = min(len(self._replay_buffer), self._replay_batch_size)
+        minibatch_indices = np.random.randint(low=0, high=len(self._replay_buffer), size=minibatch_size)
+        print(minibatch_indices.shape)
+        print(minibatch_indices)
 
 
 
