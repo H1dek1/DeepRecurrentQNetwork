@@ -11,11 +11,11 @@ def main():
             env=env, 
             window_size=4,
             eps_change_length=100,
-            n_replay_epoch=4,
+            n_replay_epoch=1,
             initial_eps=1.0
             )
     print('Success to construct')
-    history = agent.learn(total_timesteps=5000)
+    history = agent.learn(total_timesteps=30000)
     print(len(agent._replay_buffer))
 
     fig, ax = plt.subplots(1, 3, figsize=(9, 3), tight_layout=True)

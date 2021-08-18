@@ -24,7 +24,7 @@ class DQN:
     :param eps_change_length: (int) The number of episodes that is taken to change epsilon.
     """
     
-    def __init__(self, env, window_size=12, replay_buffer_size=5000, replay_batch_size=128, n_replay_epoch=1, learning_starts=1000, learning_rate=0.0025, gamma=0.99, initial_eps=1.0, final_eps=0.1, eps_change_length=1000, load_Qfunc=False, Qfunc_path=None):
+    def __init__(self, env, window_size=12, replay_buffer_size=5000, replay_batch_size=32, n_replay_epoch=1, learning_starts=1000, learning_rate=0.01, gamma=0.99, initial_eps=1.0, final_eps=0.01, eps_change_length=1000, load_Qfunc=False, Qfunc_path=None):
         """
         Environment
         """
@@ -67,9 +67,9 @@ class DQN:
         #series_input = Input(shape=(self._window_size, 1), name='series_data')
         #series_net = LSTM(64, return_sequences=True)(series_input)
         #series_net = LSTM(32, return_sequences=False)(series_net)
-        series_net = Dense(64, activation='relu')(series_input)
-        series_net = Dense(32, activation='relu')(series_net)
-        series_net = Dense(16, activation='relu')(series_net)
+        series_net = Dense(16, activation='relu')(series_input)
+        #series_net = Dense(32, activation='relu')(series_net)
+        #series_net = Dense(16, activation='relu')(series_net)
         series_net = Dense(16, activation='relu')(series_net)
         series_output = Dense(self._n_action, activation='linear')(series_net)
 
@@ -92,7 +92,9 @@ class DQN:
                 # proceed environment
                 next_obs, reward, done, _ = self._env.step(action)
                 if done:
-                    reward = -1
+                    reward = -2
+                else:
+                    reward = 1
                 next_obs = next_obs.reshape(1, -1, 1)
                 # store experience
                 self._replay_buffer.append( np.array([obs[0], action, reward, next_obs[0]], dtype=object) )
