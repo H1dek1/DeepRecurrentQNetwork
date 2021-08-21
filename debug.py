@@ -10,13 +10,18 @@ def main():
     agent = DQN(
             env=env, 
             window_size=4,
-            eps_change_length=1000,
-            n_replay_epoch=20,
-            initial_eps=1.0
+            learning_starts=1000,
+            eps_change_length=500,
+            n_replay_epoch=10,
+            initial_eps=1.0,
+            replay_batch_size=256,
+            update_frequency=50,
+            use_doubleDQN=True,
+            target_update_frequency=100,
             )
     print('Success to construct')
-    history = agent.learn(total_timesteps=50000)
-    print(len(agent._replay_buffer))
+    history = agent.learn(total_timesteps=25000)
+    #print(len(agent._replay_buffer))
 
     fig, ax = plt.subplots(1, 3, figsize=(9, 3), tight_layout=True)
     ax[0].set_xlabel('total_step', fontsize=15)
@@ -27,7 +32,7 @@ def main():
     ax[1].plot(history['total_step'], history['epi_rew'])
     ax[2].set_xlabel('total_step', fontsize=15)
     ax[2].set_ylabel('ave_loss', fontsize=15)
-    ax[2].plot(history['total_step'], history['ave_loss'])
+    ax[2].scatter(history['total_step'], history['ave_loss'], marker='.')
     fig.savefig('result.png')
     #plt.show()
     #agent.simulate(visualize=True)

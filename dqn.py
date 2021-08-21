@@ -7,8 +7,9 @@ import keras
 from tensorflow.keras.models import Model
 from tensorflow.keras.layers import Input, concatenate, Dense, LSTM
 from tensorflow.keras.optimizers import Adam
-#from keras.utils.vis_utils import plot_model
-
+#    from keras.utils.vis_utils import plot_model
+from tensorflow.keras.models import model_from_config
+     
 class DQN:
     """
     Simple Deep Q-Network for time series Reinforcement Learning
@@ -24,7 +25,7 @@ class DQN:
     :param eps_change_length: (int) The number of episodes that is taken to change epsilon.
     """
     
-    def __init__(self, env, window_size=12, replay_buffer_size=1000, replay_batch_size=512, n_replay_epoch=1, learning_starts=1000, learning_rate=0.01, gamma=0.99, initial_eps=1.0, final_eps=0.01, eps_change_length=1000, load_Qfunc=False, Qfunc_path=None):
+    def __init__(self, env, window_size=12, replay_buffer_size=1000, replay_batch_size=512, n_replay_epoch=1, learning_starts=1000, learning_rate=0.01, gamma=0.99, initial_eps=1.0, final_eps=0.01, eps_change_length=1000, load_Qfunc=False, Qfunc_path=None, use_doubleDQN=False, update_frequency=100, target_update_frequency=500):
         """
         Environment
         """
@@ -43,6 +44,7 @@ class DQN:
         """
         Learning
         """
+        self._use_doubleDQN = use_doubleDQN
         self._learning_starts = learning_starts
         self._learning_rate = learning_rate
         self._gamma = gamma
@@ -50,6 +52,8 @@ class DQN:
         self._initial_eps = initial_eps
         self._final_eps = final_eps
         self._eps_change_length = eps_change_length
+        self._update_frequency = update_frequency
+        self._target_update_frequency = target_update_frequency
 
         """
         Q-Function
@@ -61,6 +65,9 @@ class DQN:
 
         #plot_model(self._Qfunc, show_shapes=True, show_layer_names=True)
         #print(self._Qfunc.summary())
+
+        if self._use_doubleDQN:
+            self._target_Qfunc = self.clone_network(self._Qfunc)
 
     def _init_Qfunc(self):
         series_input = Input(shape=(self._window_size,), name='series_data')
@@ -106,8 +113,12 @@ class DQN:
                 epi_rew += reward
                 # experience replay
                 if step_count > self._learning_starts \
-                        and step_count%100 == 0:
-                    loss = self._experience_replay()
+                        and step_count%self._update_frequency == 0:
+                    if step_count%self._target_update_frequency == 0:
+                        update_targetQ = True
+                    else:
+                        update_targetQ = False
+                    loss = self._experience_replay(update_targetQ)
                     loss_history.extend(loss.history['loss'])
 
                 # judgement
@@ -123,7 +134,7 @@ class DQN:
             if len(loss_history) != 0:
                 history['ave_loss'].append( sum(loss_history)/len(loss_history) )
             else:
-                history['ave_loss'].append( 0 )
+                history['ave_loss'].append( np.nan )
             # End Inside loop
             if step_count >= total_timesteps:
                 break # from outside loop
@@ -148,7 +159,7 @@ class DQN:
 
         return action
     
-    def _experience_replay(self,):
+    def _experience_replay(self, update_targetQ):
         obs_minibatch = []
         target_minibatch = []
         action_minibatch = []
@@ -156,22 +167,36 @@ class DQN:
         # define sampling size
         minibatch_size = min(len(self._replay_buffer), self._replay_batch_size)
         # choose experience batch randomly
-        minibatch = np.array(random.sample(self._replay_buffer, minibatch_size), dtype=object)
+        minibatch = np.array(random.sample(self._replay_buffer, minibatch_size),
+                dtype=object)
         obs_batch = np.stack(minibatch[:,0], axis=0)
         action_batch = minibatch[:, 1]
         reward_batch = minibatch[:, 2]
         next_obs_batch = np.stack(minibatch[:,3], axis=0)
 
-        # current output of network
-        current_Q_values = self._Qfunc.predict(obs_batch)
         # make target value
+        if self._use_doubleDQN:
+            if update_targetQ:
+                # parameter value from main Q to target Q
+                self._target_Qfunc.set_weights(self._Qfunc.get_weights())
+
+            id_actions = np.argmax(self._Qfunc.predict(next_obs_batch), axis=1)
+            next_target_Q = np.empty(0)
+            for next_obs, action in zip(next_obs_batch, id_actions):
+                q = self._target_Qfunc.predict(np.array([next_obs]))[0, action]
+                next_target_Q = np.append(next_target_Q, q)
+        else:
+            next_target_Q = np.max(self._Qfunc.predict(next_obs_batch), axis=1)
+
+        current_Q_values = self._Qfunc.predict(obs_batch)
         target_Q_values = current_Q_values.copy()
 
-        next_maxQ = np.max(self._Qfunc.predict(next_obs_batch), axis=1)
-        for target_Q_value, action, reward, maxQ \
-                in zip(target_Q_values, action_batch, reward_batch, next_maxQ):
-            target_Q_value[action] = reward + self._gamma*maxQ
+        for target_Q_value, action, reward, targetQ \
+                in zip(target_Q_values, action_batch, reward_batch, next_target_Q):
+            target_Q_value[action] = reward + self._gamma*targetQ
 
+
+        # update parameters
         loss = self._Qfunc.fit(
                        obs_batch,
                        target_Q_values,
@@ -191,6 +216,16 @@ class DQN:
     def _action(self, obs):
         Q_values = self._Qfunc.predict(obs).flatten()
         return np.argmax(Q_values)
+
+    def clone_network(self, model):
+        config = {
+                'class_name': model.__class__.__name__,
+                'config': model.get_config(),
+                }
+        clone = model_from_config(config, custom_objects={})
+        clone.set_weights(model.get_weights())
+        return clone
+
 
 
 
