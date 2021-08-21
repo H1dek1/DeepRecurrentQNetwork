@@ -4,10 +4,10 @@ import gym
 import numpy as np
 
 import keras
-from keras.models import Model
-from keras.layers import Input, concatenate, Dense, LSTM
+from tensorflow.keras.models import Model
+from tensorflow.keras.layers import Input, concatenate, Dense, LSTM
 from tensorflow.keras.optimizers import Adam
-from keras.utils.vis_utils import plot_model
+#from keras.utils.vis_utils import plot_model
 
 class DQN:
     """
@@ -24,7 +24,7 @@ class DQN:
     :param eps_change_length: (int) The number of episodes that is taken to change epsilon.
     """
     
-    def __init__(self, env, window_size=12, replay_buffer_size=5000, replay_batch_size=32, n_replay_epoch=1, learning_starts=1000, learning_rate=0.01, gamma=0.99, initial_eps=1.0, final_eps=0.01, eps_change_length=1000, load_Qfunc=False, Qfunc_path=None):
+    def __init__(self, env, window_size=12, replay_buffer_size=1000, replay_batch_size=512, n_replay_epoch=1, learning_starts=1000, learning_rate=0.01, gamma=0.99, initial_eps=1.0, final_eps=0.01, eps_change_length=1000, load_Qfunc=False, Qfunc_path=None):
         """
         Environment
         """
@@ -59,7 +59,7 @@ class DQN:
         else:
             self._Qfunc = None
 
-        plot_model(self._Qfunc, show_shapes=True, show_layer_names=True)
+        #plot_model(self._Qfunc, show_shapes=True, show_layer_names=True)
         #print(self._Qfunc.summary())
 
     def _init_Qfunc(self):
@@ -91,7 +91,7 @@ class DQN:
                 action = self._decide_action(obs, episode_count)
                 # proceed environment
                 next_obs, reward, done, _ = self._env.step(action)
-                if done:
+                if done and epi_len < 195:
                     reward = -2
                 else:
                     reward = 1
@@ -105,7 +105,8 @@ class DQN:
                 epi_len += 1
                 epi_rew += reward
                 # experience replay
-                if step_count > self._learning_starts:
+                if step_count > self._learning_starts \
+                        and step_count%100 == 0:
                     loss = self._experience_replay()
                     loss_history.extend(loss.history['loss'])
 
