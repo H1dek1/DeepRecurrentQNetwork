@@ -5,7 +5,7 @@ import numpy as np
 
 import keras
 from tensorflow.keras.models import Model
-from tensorflow.keras.layers import Input, concatenate, Dense, LSTM
+from tensorflow.keras.layers import Input, concatenate, Dense, LSTM, Lambda, concatenate
 from tensorflow.keras.optimizers import Adam
 #    from keras.utils.vis_utils import plot_model
 from tensorflow.keras.models import model_from_config
@@ -25,7 +25,7 @@ class DQN:
     :param eps_change_length: (int) The number of episodes that is taken to change epsilon.
     """
     
-    def __init__(self, env, window_size=12, replay_buffer_size=1000, replay_batch_size=512, n_replay_epoch=1, learning_starts=1000, learning_rate=0.01, gamma=0.99, initial_eps=1.0, final_eps=0.01, eps_change_length=1000, load_Qfunc=False, Qfunc_path=None, use_doubleDQN=False, update_frequency=100, target_update_frequency=500):
+    def __init__(self, env, window_size=12, replay_buffer_size=1000, replay_batch_size=512, n_replay_epoch=1, learning_starts=1000, learning_rate=0.01, gamma=0.99, initial_eps=1.0, final_eps=0.01, eps_change_length=1000, load_Qfunc=False, Qfunc_path=None, use_doubleDQN=False, update_interval=100, target_update_interval=500, use_dueling=False):
         """
         Environment
         """
@@ -44,6 +44,7 @@ class DQN:
         """
         Learning
         """
+        self._use_dueling = use_dueling
         self._use_doubleDQN = use_doubleDQN
         self._learning_starts = learning_starts
         self._learning_rate = learning_rate
@@ -52,14 +53,14 @@ class DQN:
         self._initial_eps = initial_eps
         self._final_eps = final_eps
         self._eps_change_length = eps_change_length
-        self._update_frequency = update_frequency
-        self._target_update_frequency = target_update_frequency
+        self._update_interval = update_interval
+        self._target_update_interval = target_update_interval
 
         """
         Q-Function
         """
         if not load_Qfunc:
-            self._init_Qfunc()
+            self._init_Qfunc(self._use_dueling)
         else:
             self._Qfunc = None
 
@@ -69,18 +70,33 @@ class DQN:
         if self._use_doubleDQN:
             self._target_Qfunc = self.clone_network(self._Qfunc)
 
-    def _init_Qfunc(self):
-        series_input = Input(shape=(self._window_size,), name='series_data')
-        #series_input = Input(shape=(self._window_size, 1), name='series_data')
-        #series_net = LSTM(64, return_sequences=True)(series_input)
-        #series_net = LSTM(32, return_sequences=False)(series_net)
-        series_net = Dense(16, activation='relu')(series_input)
-        #series_net = Dense(32, activation='relu')(series_net)
-        #series_net = Dense(16, activation='relu')(series_net)
-        series_net = Dense(16, activation='relu')(series_net)
-        series_output = Dense(self._n_action, activation='linear')(series_net)
+    def _init_Qfunc(self, use_dueling=False):
+        if use_dueling:
+            series_input = Input(shape=(self._window_size,), name='series_data')
+            series_net = Dense(16, activation='relu')(series_input)
+            series_net = Dense(16, activation='relu')(series_net)
+            # separate
+            state_value = Dense(16, activation='relu')(series_net)
+            state_value = Dense(1, activation='relu')(state_value)
 
-        self._Qfunc = Model(inputs=series_input, outputs=series_output)
+            advantage = Dense(16, activation='relu')(series_net)
+            advantage = Dense(self._window_size, activation='relu')(advantage)
+
+            # concatenate
+            concat = concatenate([state_value, advantage])
+            output = Lambda(lambda a: K.expand_dims(a[:, 0], -1) + a[:, 1:] - tf.stop_gradient(K.mean(a[:, 1:], keepdims=True)), output_shape=(self._n_action,))(concat)
+        else:
+            series_input = Input(shape=(self._window_size,), name='series_data')
+            #series_input = Input(shape=(self._window_size, 1), name='series_data')
+            #series_net = LSTM(64, return_sequences=True)(series_input)
+            #series_net = LSTM(32, return_sequences=False)(series_net)
+            series_net = Dense(16, activation='relu')(series_input)
+            #series_net = Dense(32, activation='relu')(series_net)
+            #series_net = Dense(16, activation='relu')(series_net)
+            series_net = Dense(16, activation='relu')(series_net)
+            output = Dense(self._n_action, activation='linear')(series_net)
+
+        self._Qfunc = Model(inputs=series_input, outputs=output)
         self._Qfunc.compile(optimizer=Adam(learning_rate=self._learning_rate), loss='mean_squared_error')
 
     def learn(self, total_timesteps):
@@ -113,8 +129,8 @@ class DQN:
                 epi_rew += reward
                 # experience replay
                 if step_count > self._learning_starts \
-                        and step_count%self._update_frequency == 0:
-                    if step_count%self._target_update_frequency == 0:
+                        and step_count%self._update_interval == 0:
+                    if step_count%self._target_update_interval == 0:
                         update_targetQ = True
                     else:
                         update_targetQ = False

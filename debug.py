@@ -10,14 +10,16 @@ def main():
     agent = DQN(
             env=env, 
             window_size=4,
+            replay_buffer_size=1000,
             learning_starts=1000,
             eps_change_length=500,
+            learning_rate=0.0001,
             n_replay_epoch=10,
             initial_eps=1.0,
-            replay_batch_size=256,
-            update_frequency=50,
+            replay_batch_size=512,
+            update_interval=100,
             use_doubleDQN=True,
-            target_update_frequency=100,
+            target_update_interval=2000,
             )
     print('Success to construct')
     history = agent.learn(total_timesteps=25000)
