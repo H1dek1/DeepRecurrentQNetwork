@@ -4,10 +4,12 @@ import gym
 import numpy as np
 
 import keras
+import tensorflow as tf
+from keras import backend as K
 from tensorflow.keras.models import Model
 from tensorflow.keras.layers import Input, concatenate, Dense, LSTM, Lambda, concatenate
 from tensorflow.keras.optimizers import Adam
-#    from keras.utils.vis_utils import plot_model
+from keras.utils.vis_utils import plot_model
 from tensorflow.keras.models import model_from_config
      
 class DQN:
@@ -64,8 +66,8 @@ class DQN:
         else:
             self._Qfunc = None
 
-        #plot_model(self._Qfunc, show_shapes=True, show_layer_names=True)
-        #print(self._Qfunc.summary())
+        plot_model(self._Qfunc, show_shapes=True, show_layer_names=True)
+        print(self._Qfunc.summary())
 
         if self._use_doubleDQN:
             self._target_Qfunc = self.clone_network(self._Qfunc)
@@ -77,14 +79,15 @@ class DQN:
             series_net = Dense(16, activation='relu')(series_net)
             # separate
             state_value = Dense(16, activation='relu')(series_net)
-            state_value = Dense(1, activation='relu')(state_value)
+            state_value = Dense(1, activation='linear', name='state_value')(state_value)
 
             advantage = Dense(16, activation='relu')(series_net)
-            advantage = Dense(self._window_size, activation='relu')(advantage)
+            advantage = Dense(self._n_action, activation='linear', name='advantage')(advantage)
 
             # concatenate
             concat = concatenate([state_value, advantage])
-            output = Lambda(lambda a: K.expand_dims(a[:, 0], -1) + a[:, 1:] - tf.stop_gradient(K.mean(a[:, 1:], keepdims=True)), output_shape=(self._n_action,))(concat)
+            output = Lambda(lambda a: K.expand_dims(a[:, 0], -1) + a[:, 1:] - tf.stop_gradient(K.mean(a[:, 1:], keepdims=True)), output_shape=(self._n_action,), name='Q_value')(concat)
+            #output = Dense(self._n_action, activation='linear')(concat)
         else:
             series_input = Input(shape=(self._window_size,), name='series_data')
             #series_input = Input(shape=(self._window_size, 1), name='series_data')
@@ -115,12 +118,16 @@ class DQN:
                 # proceed environment
                 next_obs, reward, done, _ = self._env.step(action)
                 if done and epi_len < 195:
-                    reward = -2
+                    reward = -1
+                elif done and epi_len >= 195:
+                    reward = 1
                 else:
                     reward = 1
                 next_obs = next_obs.reshape(1, -1, 1)
                 # store experience
-                self._replay_buffer.append( np.array([obs[0], action, reward, next_obs[0]], dtype=object) )
+                self._replay_buffer.append( 
+                        np.array([obs[0], action, reward, next_obs[0]], dtype=object) 
+                        )
                 # update observation
                 obs = next_obs
                 # increments
@@ -138,8 +145,12 @@ class DQN:
                     loss_history.extend(loss.history['loss'])
 
                 # judgement
-                if done or step_count == total_timesteps:
-                    print(f'Episode {episode_count}:    reward: {epi_rew}, remain step: {total_timesteps-step_count}')
+                #if done or step_count == total_timesteps:
+                if done:
+                    if len(loss_history) != 0:
+                        print(f'Episode {episode_count}:  reward: {epi_rew}, remain step: {total_timesteps-step_count}, loss: {np.average(loss_history)}')
+                    else:
+                        print(f'Episode {episode_count}:  reward: {epi_rew}, remain step: {total_timesteps-step_count}')
                     break # from inside loop
 
             # each episode
@@ -191,25 +202,30 @@ class DQN:
         next_obs_batch = np.stack(minibatch[:,3], axis=0)
 
         # make target value
+        current_Q_values = self._Qfunc.predict(obs_batch)
+        target_Q_values = current_Q_values.copy()
+
         if self._use_doubleDQN:
             if update_targetQ:
                 # parameter value from main Q to target Q
                 self._target_Qfunc.set_weights(self._Qfunc.get_weights())
 
-            id_actions = np.argmax(self._Qfunc.predict(next_obs_batch), axis=1)
-            next_target_Q = np.empty(0)
-            for next_obs, action in zip(next_obs_batch, id_actions):
-                q = self._target_Qfunc.predict(np.array([next_obs]))[0, action]
-                next_target_Q = np.append(next_target_Q, q)
+            next_actions = np.argmax(self._Qfunc.predict(next_obs_batch), axis=1)
+
+            for next_obs, next_action, target_Q_value, action, reward \
+                    in zip(
+                            next_obs_batch, 
+                            next_actions, 
+                            target_Q_values, 
+                            action_batch, 
+                            reward_batch):
+                next_q = self._target_Qfunc.predict(np.array([next_obs]))[0, next_action]
+                target_Q_value[action] = reward + self._gamma*next_q
         else:
             next_target_Q = np.max(self._Qfunc.predict(next_obs_batch), axis=1)
-
-        current_Q_values = self._Qfunc.predict(obs_batch)
-        target_Q_values = current_Q_values.copy()
-
-        for target_Q_value, action, reward, targetQ \
-                in zip(target_Q_values, action_batch, reward_batch, next_target_Q):
-            target_Q_value[action] = reward + self._gamma*targetQ
+            for target_Q_value, action, reward, targetQ \
+                    in zip(target_Q_values, action_batch, reward_batch, next_target_Q):
+                target_Q_value[action] = reward + self._gamma*targetQ
 
 
         # update parameters

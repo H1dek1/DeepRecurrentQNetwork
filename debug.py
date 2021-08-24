@@ -13,16 +13,17 @@ def main():
             replay_buffer_size=1000,
             learning_starts=1000,
             eps_change_length=500,
-            learning_rate=0.0001,
-            n_replay_epoch=10,
-            initial_eps=1.0,
+            learning_rate=0.01,
+            n_replay_epoch=30,
+            initial_eps=0.5,
             replay_batch_size=512,
             update_interval=100,
             use_doubleDQN=True,
-            target_update_interval=2000,
+            target_update_interval=1000,
+            use_dueling=False
             )
     print('Success to construct')
-    history = agent.learn(total_timesteps=25000)
+    history = agent.learn(total_timesteps=50000)
     #print(len(agent._replay_buffer))
 
     fig, ax = plt.subplots(1, 3, figsize=(9, 3), tight_layout=True)
