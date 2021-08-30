@@ -19,8 +19,8 @@ def main():
             replay_batch_size=512,
             update_interval=100,
             use_doubleDQN=True,
-            target_update_interval=1000,
-            use_dueling=False
+            target_update_interval=300,
+            use_dueling=True
             )
     print('Success to construct')
     history = agent.learn(total_timesteps=50000)

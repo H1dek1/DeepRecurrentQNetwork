@@ -70,24 +70,24 @@ class DQN:
         print(self._Qfunc.summary())
 
         if self._use_doubleDQN:
-            self._target_Qfunc = self.clone_network(self._Qfunc)
+            self._target_Qfunc = self._clone_network(self._Qfunc)
 
     def _init_Qfunc(self, use_dueling=False):
         if use_dueling:
             series_input = Input(shape=(self._window_size,), name='series_data')
             series_net = Dense(16, activation='relu')(series_input)
-            series_net = Dense(16, activation='relu')(series_net)
+            #series_net = Dense(16, activation='relu')(series_net)
             # separate
-            state_value = Dense(16, activation='relu')(series_net)
-            state_value = Dense(1, activation='linear', name='state_value')(state_value)
-
-            advantage = Dense(16, activation='relu')(series_net)
-            advantage = Dense(self._n_action, activation='linear', name='advantage')(advantage)
+            #state_value = Dense(16, activation='relu')(series_net)
+            state_value = Dense(1, activation='linear', name='state_value')(series_net)
+            #advantage = Dense(16, activation='relu')(series_net)
+            advantage = Dense(self._n_action, activation='linear', name='advantage')(series_net)
+            output = (state_value + (advantage - tf.math.reduce_mean(advantage, axis=1, keepdims=True)))
 
             # concatenate
-            concat = concatenate([state_value, advantage])
-            output = Lambda(lambda a: K.expand_dims(a[:, 0], -1) + a[:, 1:] - tf.stop_gradient(K.mean(a[:, 1:], keepdims=True)), output_shape=(self._n_action,), name='Q_value')(concat)
-            #output = Dense(self._n_action, activation='linear')(concat)
+            #concat = concatenate([state_value, advantage])
+            ##output = Lambda(lambda a: K.expand_dims(a[:, 0], -1) + a[:, 1:] - tf.stop_gradient(K.mean(a[:, 1:], keepdims=True)), output_shape=(self._n_action,), name='Q_value')(concat)
+            #output = Lambda(lambda a: K.expand_dims(a[:, 0], -1) + a[:, 1:] - K.mean(a[:, 1:], keepdims=True), output_shape=(self._n_action,), name='Q_value')(concat)
         else:
             series_input = Input(shape=(self._window_size,), name='series_data')
             #series_input = Input(shape=(self._window_size, 1), name='series_data')
@@ -162,7 +162,7 @@ class DQN:
                 history['ave_loss'].append( sum(loss_history)/len(loss_history) )
             else:
                 history['ave_loss'].append( np.nan )
-            # End Inside loop
+            # End inside loop
             if step_count >= total_timesteps:
                 break # from outside loop
 
@@ -176,7 +176,6 @@ class DQN:
 
         if eps < np.random.rand():
             # greedy
-            #obs = obs.reshape(1, -1, 1)
             Q_values = self._Qfunc.predict(obs).flatten()
             action = np.argmax(Q_values)
             
@@ -221,7 +220,7 @@ class DQN:
                             reward_batch):
                 next_q = self._target_Qfunc.predict(np.array([next_obs]))[0, next_action]
                 target_Q_value[action] = reward + self._gamma*next_q
-        else:
+        else: # not use double DQN
             next_target_Q = np.max(self._Qfunc.predict(next_obs_batch), axis=1)
             for target_Q_value, action, reward, targetQ \
                     in zip(target_Q_values, action_batch, reward_batch, next_target_Q):
@@ -249,7 +248,7 @@ class DQN:
         Q_values = self._Qfunc.predict(obs).flatten()
         return np.argmax(Q_values)
 
-    def clone_network(self, model):
+    def _clone_network(self, model):
         config = {
                 'class_name': model.__class__.__name__,
                 'config': model.get_config(),
