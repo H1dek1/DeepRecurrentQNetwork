@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+import sys
 import numpy as np
 import matplotlib.pyplot as plt
 import gym
@@ -16,14 +17,15 @@ def main():
             learning_rate=0.01,
             n_replay_epoch=30,
             initial_eps=0.5,
-            replay_batch_size=512,
-            update_interval=100,
+            replay_batch_size=32,
+            update_interval=4,
             use_doubleDQN=True,
-            target_update_interval=300,
-            use_dueling=True
+            target_update_interval=5000,
+            use_dueling=True,
+            use_convolution=False
             )
     print('Success to construct')
-    history = agent.learn(total_timesteps=50000)
+    history = agent.learn(total_timesteps=20000)
     #print(len(agent._replay_buffer))
 
     fig, ax = plt.subplots(1, 3, figsize=(9, 3), tight_layout=True)

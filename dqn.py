@@ -7,7 +7,7 @@ import keras
 import tensorflow as tf
 from keras import backend as K
 from tensorflow.keras.models import Model
-from tensorflow.keras.layers import Input, concatenate, Dense, LSTM, Lambda, concatenate
+from tensorflow.keras.layers import Input, concatenate, Dense, LSTM, Lambda, Conv1D
 from tensorflow.keras.optimizers import Adam
 from keras.utils.vis_utils import plot_model
 from tensorflow.keras.models import model_from_config
@@ -27,7 +27,7 @@ class DQN:
     :param eps_change_length: (int) The number of episodes that is taken to change epsilon.
     """
     
-    def __init__(self, env, window_size=12, replay_buffer_size=1000, replay_batch_size=512, n_replay_epoch=1, learning_starts=1000, learning_rate=0.01, gamma=0.99, initial_eps=1.0, final_eps=0.01, eps_change_length=1000, load_Qfunc=False, Qfunc_path=None, use_doubleDQN=False, update_interval=100, target_update_interval=500, use_dueling=False):
+    def __init__(self, env, window_size=12, replay_buffer_size=1000, replay_batch_size=512, n_replay_epoch=1, learning_starts=1000, learning_rate=0.01, gamma=0.99, initial_eps=1.0, final_eps=0.01, eps_change_length=1000, load_Qfunc=False, Qfunc_path=None, use_doubleDQN=False, update_interval=100, target_update_interval=500, use_dueling=False, use_convolution=False):
         """
         Environment
         """
@@ -62,7 +62,7 @@ class DQN:
         Q-Function
         """
         if not load_Qfunc:
-            self._init_Qfunc(self._use_dueling)
+            self._init_Qfunc(self._use_dueling, use_convolution)
         else:
             self._Qfunc = None
 
@@ -72,32 +72,40 @@ class DQN:
         if self._use_doubleDQN:
             self._target_Qfunc = self._clone_network(self._Qfunc)
 
-    def _init_Qfunc(self, use_dueling=False):
+    def _init_Qfunc(self, use_dueling=False, use_convolution=False):
         if use_dueling:
             series_input = Input(shape=(self._window_size,), name='series_data')
             series_net = Dense(16, activation='relu')(series_input)
-            #series_net = Dense(16, activation='relu')(series_net)
+            series_net = Dense(16, activation='relu')(series_net)
             # separate
             #state_value = Dense(16, activation='relu')(series_net)
             state_value = Dense(1, activation='linear', name='state_value')(series_net)
             #advantage = Dense(16, activation='relu')(series_net)
             advantage = Dense(self._n_action, activation='linear', name='advantage')(series_net)
-            output = (state_value + (advantage - tf.math.reduce_mean(advantage, axis=1, keepdims=True)))
+            #output = (state_value + (advantage - tf.math.reduce_mean(advantage, axis=1, keepdims=True)))
 
             # concatenate
-            #concat = concatenate([state_value, advantage])
-            ##output = Lambda(lambda a: K.expand_dims(a[:, 0], -1) + a[:, 1:] - tf.stop_gradient(K.mean(a[:, 1:], keepdims=True)), output_shape=(self._n_action,), name='Q_value')(concat)
-            #output = Lambda(lambda a: K.expand_dims(a[:, 0], -1) + a[:, 1:] - K.mean(a[:, 1:], keepdims=True), output_shape=(self._n_action,), name='Q_value')(concat)
+            concat = concatenate([state_value, advantage])
+            #output = Lambda(lambda a: K.expand_dims(a[:, 0], -1) + a[:, 1:] - tf.stop_gradient(K.mean(a[:, 1:], keepdims=True)), output_shape=(self._n_action,), name='Q_value')(concat)
+            output = Lambda(lambda a: K.expand_dims(a[:, 0], -1) + a[:, 1:] - K.mean(a[:, 1:], keepdims=True), output_shape=(self._n_action,), name='Q_value')(concat)
         else:
-            series_input = Input(shape=(self._window_size,), name='series_data')
-            #series_input = Input(shape=(self._window_size, 1), name='series_data')
-            #series_net = LSTM(64, return_sequences=True)(series_input)
-            #series_net = LSTM(32, return_sequences=False)(series_net)
-            series_net = Dense(16, activation='relu')(series_input)
-            #series_net = Dense(32, activation='relu')(series_net)
-            #series_net = Dense(16, activation='relu')(series_net)
-            series_net = Dense(16, activation='relu')(series_net)
-            output = Dense(self._n_action, activation='linear')(series_net)
+            if use_convolution:
+                series_input = Input(shape=(self._window_size, 1), name='series_data')
+                series_net = Conv1D(filters=32, kernel_size=8, padding='same', activation='relu')(series_input)
+                series_net = Dense(16, activation='relu')(series_net)
+                output = Dense(self._n_action, activation='linear')(series_net)
+            else:
+                series_input = Input(shape=(self._window_size,), name='series_data')
+                #series_input = Input(shape=(self._window_size, 1), name='series_data')
+                #series_net = LSTM(64, return_sequences=True)(series_input)
+                #series_net = LSTM(32, return_sequences=False)(series_net)
+                series_net = Dense(16, activation='relu')(series_input)
+                #series_net = Dense(32, activation='relu')(series_net)
+                #series_net = Dense(16, activation='relu')(series_net)
+                series_net = Dense(16, activation='relu')(series_net)
+                output = Dense(self._n_action, activation='linear')(series_net)
+
+
 
         self._Qfunc = Model(inputs=series_input, outputs=output)
         self._Qfunc.compile(optimizer=Adam(learning_rate=self._learning_rate), loss='mean_squared_error')

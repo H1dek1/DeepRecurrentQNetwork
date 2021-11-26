@@ -1,3 +1,5 @@
 /.venv3.8/
 /.venv3.7/
 /__pycache__/
+/*.png
+/.python-version
